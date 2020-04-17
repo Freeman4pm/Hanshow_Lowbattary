@@ -7,14 +7,8 @@ Created on Tue Mar 31 12:39:51 2020
 
 from sqlalchemy import create_engine
 import pymysql
-from datetime import date
+import json
 
-database_host = 'localhost'
-database_port = '3306'
-username = "root"
-password = "admin"
-database_name = "esl_lowbattary"
-table_name = 'default'
 
 def data_to_db(database_host, database_port, username, password, 
                database_name, table_name, df):
@@ -105,8 +99,20 @@ def merge_tables(database_host, database_port, username, password,
     conn.close()
         
 if __name__ == "__main__":
-#    data_to_db(database_host, database_port, username, password, 
-#               database_name, table_name)
-#    create_new_db(database_host, database_port, username, password, 
-#                  database_name, 'default2')
-    pass
+    with open("setting.json",'r', encoding = 'utf-8') as load_f:
+        settings = json.load(load_f)
+    path = settings['scandata']['eslpath']
+    database_host = settings['conn']['ip']
+    database_port = settings['conn']['port']
+    username = settings['conn']['uname']
+    password = settings['conn']['pwd']
+    database_name = settings['conn']['db']
+    merge_tags = settings['mergedata']['fromtag']
+    merge_table = settings['mergedata']['totag']
+    try:
+        conn = pymysql.connect(host=database_host, port=int(database_port), 
+                           user=username, passwd=password, db=database_name)
+        print("Successfully connect to the database")
+        conn.close()
+    except:
+        print("Failed to connect to the database")
