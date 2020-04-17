@@ -1,0 +1,5 @@
+{
+    "conn":{"db":"hanshow_tsc_tst_script","uname":"zhangrui","pwd":"1qazXCVBNM","port":"13306","ip":"51.144.247.133"},
+    "scandata":{"eslpath":"esl", "himpath":"him"},
+    "mergedata":{"fromtag":["华润","redtick"],"totag":"test"}
+}
