@@ -8,8 +8,10 @@ Created on Tue Mar 31 12:39:51 2020
 from sqlalchemy import create_engine
 import pymysql
 import json
+from datetime import date
 
 
+time_stamp = date.today().strftime("%y%m%d")
 def data_to_db(database_host, database_port, username, password, 
                database_name, table_name, df):
     db_data = 'mysql+mysqldb://' + username + ':' + password + '@' + database_host + ':'+ database_port + '/' \
@@ -40,8 +42,8 @@ def drop_duplicates_db(database_host, database_port, username, password,
                            user=username, passwd=password, db=database_name)
     cursor = conn.cursor()
     sql = "delete from {} where auto_id not in \
-             (select auto_id from \
-              (SELECT min(auto_id), eslid From {} \
+             (select id from \
+              (SELECT min(auto_id) as id, eslid From {} \
                group by eslid) t ) ".format(table_name, table_name)
     dropped = cursor.execute(sql)
     conn.commit()
@@ -75,7 +77,7 @@ def db_table_list(database_host, database_port, username, password,
     cursor.execute("SELECT TABLE_NAME \
                    FROM INFORMATION_SCHEMA.TABLES\
                    WHERE TABLE_TYPE = 'BASE TABLE' \
-                   AND TABLE_SCHEMA = '{}' AND TABLE_NAME LIKE 's0%{}%{}%'".format(database_name,tag, data_type))
+                   AND TABLE_SCHEMA = '{}' AND TABLE_NAME LIKE 's0%{}%{}%_{}'".format(database_name,tag, data_type, time_stamp))
     table_list = cursor.fetchall()
     cursor.close()
     conn.close()

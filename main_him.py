@@ -32,31 +32,23 @@ def get_encoding(file):
         return chardet.detect(f.read())['encoding']
 
 ###############################SCANDATA#######################################
-g = os.walk(path)
+file_list = os.listdir(path)
 time_stamp = date.today().strftime("%y%m%d")
 print("================Scan data==================")
-for path,dir_list,file_list in g:  
-    if len(file_list) == 0:
-        continue
+column_names = ['eslid','eslcode','outdate','hardwareversion']
+for file_name in file_list:
     df = pd.DataFrame()
-    tag = [x.split('-')[2] for x in file_list]
-    tag = list(set(tag))
-    if len(tag) > 1:
-        raise Exception('CustomerError: The folder' + path + 'contains more than one customer data') 
-    tag = tag[0]
-    column_names = ['eslid','eslcode','outdate','hardwareversion']
-    for file_name in file_list:
-        full_path = os.path.join(path,file_name)
-        print("converting codec {}".format(full_path))
-        encoding = get_encoding(full_path)
-        if encoding[:3] != 'UTF' and encoding[:3] != 'utf':
-            dft = pd.read_csv(full_path,encoding = 'GBK', header = None, names = column_names)
-        else:
-            dft = pd.read_csv(full_path,encoding = encoding, header = None, names = column_names)
-        dft['outdate'] = dft['outdate'].replace('	null', '	1900-01-01 00:00:00.00')
-        dft['outdate'] = pd.to_datetime(dft['outdate'], format = "%Y-%m-%d %H:%M:%S")
-    
-        df = pd.concat([df,dft])
+    tag = file_name.split('-')[2]
+    full_path = os.path.join(path,file_name)
+    print("converting codec {}".format(full_path))
+    encoding = get_encoding(full_path)
+    if encoding[:3] != 'UTF' and encoding[:3] != 'utf':
+        df = pd.read_csv(full_path,encoding = 'GBK', header = None, names = column_names)
+    else:
+        df = pd.read_csv(full_path,encoding = encoding, header = None, names = column_names)
+    df['outdate'] = df['outdate'].replace('	null', '	1900-01-01 00:00:00.00')
+    df['outdate'] = pd.to_datetime(df['outdate'], format = "%Y-%m-%d %H:%M:%S")
+
     s0_table_name = 's0___' + tag + '_' + 'him' + '_' + time_stamp
     s3_table_name = 's3___' + tag + '_' + 'him' + '_' + time_stamp
     db_connection.create_new_db(database_host, database_port, username, password, 
@@ -64,13 +56,13 @@ for path,dir_list,file_list in g:
 
     db_connection.data_to_db(database_host, database_port, username, password, 
                    database_name, s0_table_name, df) 
-    print("Data reading complete for folder " + path) 
+    print("Data reading complete {}".format(full_path)) 
     
     
-#    db_connection.create_new_db(database_host, database_port, username, password, 
-#                  database_name, s3_table_name, data_type = 'him')
-#    db_connection.data_to_db(database_host, database_port, username, password, 
-#               database_name, 's3___'+tag+'_'+time_stamp, df) 
+    db_connection.create_new_db(database_host, database_port, username, password, 
+                  database_name, s3_table_name, data_type = 'him')
+    db_connection.data_to_db(database_host, database_port, username, password, 
+               database_name, s3_table_name, df) 
 #
     dropped = db_connection.drop_duplicates_db(database_host, database_port, username, password, 
                   database_name, s3_table_name)

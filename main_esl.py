@@ -33,16 +33,18 @@ def get_encoding(file):
 
 ###############################SCANDATA#######################################
 g = os.walk(path)
+df = pd.DataFrame()
 time_stamp = date.today().strftime("%y%m%d")
 print("================Scan data==================")
 for path,dir_list,file_list in g:  
     if len(file_list) == 0:
         continue
-    df = pd.DataFrame()
+    print("-----------------------------------")
+    print("Reading csv data in {}".format(path))
     tag = [x.split('-')[2] for x in file_list]
     tag = list(set(tag))
     if len(tag) > 1:
-        raise Exception('CustomerError: The folder' + path + 'contains more than one customer data') 
+        raise Exception('CustomerError: The folder ' + path + ' contains more than one customer data') 
     tag = tag[0]
     for file_name in file_list:
         full_path = os.path.join(path,file_name)
@@ -79,6 +81,7 @@ for path,dir_list,file_list in g:
     db_connection.drop_duplicates_db_2(database_host, database_port, username, password, 
                   database_name, s0_table_name, s3_table_name)
     print("Duplicated eslids dropped for {}".format(tag))
+    df.drop(df.index, inplace=True)
 ###########################MERGEDATA###########################################
 print("================Merge data==================")
 table_list = []
