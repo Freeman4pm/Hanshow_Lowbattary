@@ -12,24 +12,33 @@ import pandas as pd
 import db_connection
 import json 
 
+def get_encoding(file):
+    # 二进制方式读取，获取字节数据，检测类型
+    with open(file, 'rb') as f:
+        return chardet.detect(f.read())['encoding']
 ###############################Import setting file#############################
-with open("setting.json",'r', encoding = 'utf-8') as load_f:
-    settings = json.load(load_f)
+json_encoder = get_encoding("setting.json")
+with open("setting.json",'r', encoding = json_encoder) as load_f:
+    str1 = load_f.read().replace("\\","\\\\")
+    settings = json.loads(str1)
     
-path = settings['scandata']['himpath']
+try:   
+    path = settings['scandata']['himpath']
+except:
+    print("no data to scan")
 database_host = settings['conn']['ip']
 database_port = settings['conn']['port']
 username = settings['conn']['uname']
 password = settings['conn']['pwd']
 database_name = settings['conn']['db']
-merge_tags = settings['mergedata']['fromtag']
-merge_table = settings['mergedata']['totag']
+try:
+    merge_tags = settings['mergedata']['fromtag']
+    merge_table = settings['mergedata']['totag']
+except:
+    print("no data to merge")
 
 
-def get_encoding(file):
-    # 二进制方式读取，获取字节数据，检测类型
-    with open(file, 'rb') as f:
-        return chardet.detect(f.read())['encoding']
+
 
 ###############################SCANDATA#######################################
 file_list = os.listdir(path)

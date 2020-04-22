@@ -6,12 +6,18 @@ Created on Tue Mar 31 12:39:51 2020
 """
 
 from sqlalchemy import create_engine
+import chardet
 import pymysql
 import json
 from datetime import date
 
 
 time_stamp = date.today().strftime("%y%m%d")
+def get_encoding(file):
+    # 二进制方式读取，获取字节数据，检测类型
+    with open(file, 'rb') as f:
+        return chardet.detect(f.read())['encoding']
+
 def data_to_db(database_host, database_port, username, password, 
                database_name, table_name, df):
     db_data = 'mysql+mysqldb://' + username + ':' + password + '@' + database_host + ':'+ database_port + '/' \
@@ -101,16 +107,15 @@ def merge_tables(database_host, database_port, username, password,
     conn.close()
         
 if __name__ == "__main__":
-    with open("setting.json",'r', encoding = 'utf-8') as load_f:
-        settings = json.load(load_f)
-    path = settings['scandata']['eslpath']
+    json_encoder = get_encoding("setting.json")
+    with open("setting.json",'r', encoding = json_encoder) as load_f:
+        str1 = load_f.read().replace("\\","\\\\")
+        settings = json.loads(str1)
     database_host = settings['conn']['ip']
     database_port = settings['conn']['port']
     username = settings['conn']['uname']
     password = settings['conn']['pwd']
     database_name = settings['conn']['db']
-    merge_tags = settings['mergedata']['fromtag']
-    merge_table = settings['mergedata']['totag']
     try:
         conn = pymysql.connect(host=database_host, port=int(database_port), 
                            user=username, passwd=password, db=database_name)

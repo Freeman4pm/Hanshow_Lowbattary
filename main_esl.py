@@ -12,24 +12,33 @@ import pandas as pd
 import db_connection
 import json 
 
+def get_encoding(file):
+    # 二进制方式读取，获取字节数据，检测类型
+    with open(file, 'rb') as f:
+        return chardet.detect(f.read())['encoding']
 ###############################Import setting file#############################
-with open("setting.json",'r', encoding = 'utf-8') as load_f:
-    settings = json.load(load_f)
-    
-path = settings['scandata']['eslpath']
+json_encoder = get_encoding("setting.json")
+with open("setting.json",'r', encoding = json_encoder) as load_f:
+    str1 = load_f.read().replace("\\","\\\\")
+    settings = json.loads(str1)
+
+try:   
+    path = settings['scandata']['eslpath']
+except:
+    print("no data to scan")
 database_host = settings['conn']['ip']
 database_port = settings['conn']['port']
 username = settings['conn']['uname']
 password = settings['conn']['pwd']
 database_name = settings['conn']['db']
-merge_tags = settings['mergedata']['fromtag']
-merge_table = settings['mergedata']['totag']
+try:
+    merge_tags = settings['mergedata']['fromtag']
+    merge_table = settings['mergedata']['totag']
+except:
+    print("no data to merge")
 
 
-def get_encoding(file):
-    # 二进制方式读取，获取字节数据，检测类型
-    with open(file, 'rb') as f:
-        return chardet.detect(f.read())['encoding']
+
 
 ###############################SCANDATA#######################################
 g = os.walk(path)
@@ -62,24 +71,27 @@ for path,dir_list,file_list in g:
         df = pd.concat([df,dft])
     s0_table_name = 's0___' + tag + '_' + 'esl' + '_' + time_stamp
     s3_table_name = 's3___' + tag + '_' + 'esl' + '_' + time_stamp
-    db_connection.create_new_db(database_host, database_port, username, password, 
-                  database_name, s0_table_name)
-
-    db_connection.data_to_db(database_host, database_port, username, password, 
-                   database_name, s0_table_name, df) 
+#    db_connection.create_new_db(database_host, database_port, username, password, 
+#                  database_name, s0_table_name)
+#
+#    db_connection.data_to_db(database_host, database_port, username, password, 
+#                   database_name, s0_table_name, df) 
     print("Data reading complete for folder " + path) 
     
+    df.drop_duplicates("esl_id", inplace=True)
     df['esl_id'].to_csv('esl_id/esl_id_{}_{}.csv'.format(tag, time_stamp),mode = 'w', encoding = 'GBK', index = False)
-    
+
     db_connection.create_new_db(database_host, database_port, username, password, 
                   database_name, s3_table_name)
+    db_connection.data_to_db(database_host, database_port, username, password, 
+                   database_name, s3_table_name, df)     
 #    db_connection.data_to_db(database_host, database_port, username, password, 
 #               database_name, 's3___'+tag+'_'+time_stamp, df) 
 #
 #    dropped = db_connection.drop_duplicates_db(database_host, database_port, username, password, 
 #                  database_name, 's3___'+tag+'_'+time_stamp)
-    db_connection.drop_duplicates_db_2(database_host, database_port, username, password, 
-                  database_name, s0_table_name, s3_table_name)
+#    db_connection.drop_duplicates_db_2(database_host, database_port, username, password, 
+#                  database_name, s0_table_name, s3_table_name)
     print("Duplicated eslids dropped for {}".format(tag))
     df.drop(df.index, inplace=True)
 ###########################MERGEDATA###########################################
