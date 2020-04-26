@@ -18,6 +18,8 @@ def get_encoding(file):
         return chardet.detect(f.read())['encoding']
 ###############################Import setting file#############################
 json_encoder = get_encoding("setting.json")
+if json_encoder[0:3] != 'utf' or 'UTF':
+    json_encoder = "GBK"
 with open("setting.json",'r', encoding = json_encoder) as load_f:
     str1 = load_f.read().replace("\\","\\\\")
     settings = json.loads(str1)
@@ -48,6 +50,9 @@ print("================Scan data==================")
 for path,dir_list,file_list in g:  
     if len(file_list) == 0:
         continue
+    for i, n in enumerate(file_list):
+        if n[-3:] != 'csv':
+            file_list.pop(i)
     print("-----------------------------------")
     print("Reading csv data in {}".format(path))
     tag = [x.split('-')[2] for x in file_list]
