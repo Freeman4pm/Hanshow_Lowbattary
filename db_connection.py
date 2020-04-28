@@ -5,8 +5,8 @@ Created on Tue Mar 31 12:39:51 2020
 @author: hanshow
 """
 
-from sqlalchemy import create_engine
 import chardet
+import time
 import pymysql
 import json
 from datetime import date
@@ -19,15 +19,24 @@ def get_encoding(file):
         return chardet.detect(f.read())['encoding']
 
 def data_to_db(database_host, database_port, username, password, 
-               database_name, table_name, df):
-    db_data = 'mysql+mysqldb://' + username + ':' + password + '@' + database_host + ':'+ database_port + '/' \
-           + database_name + '?charset=utf8'
-    engine = create_engine(db_data)
+               database_name, table_name, column, value):
+    conn = pymysql.connect(host=database_host, port=int(database_port), 
+                           user=username, passwd=password, db=database_name)
+    cursor = conn.cursor()
+    sep = ','
+    col = sep.join(column)
+    place_holder = ['%s' for item in value[0]]
+    place_holder = sep.join(place_holder)
+    try:
+        sql = 'INSERT INTO {} ({}) VALUES({})'.format(table_name, col, place_holder)
+        cursor.executemany(sql, value)
+        conn.commit()
+    except Exception as e:
+        print(e)
+        conn.rollback()	
+    cursor.close()
+    conn.close()
     
-    df.to_sql(table_name, engine, if_exists='append', index=False)
-    
-    engine.dispose()
-
 def create_new_db(database_host, database_port, username, password, 
                   database_name, table_name, data_type = 'esl'):
     conn = pymysql.connect(host=database_host, port=int(database_port), 
@@ -43,16 +52,21 @@ def create_new_db(database_host, database_port, username, password,
     conn.close()  
     return exist
 def drop_duplicates_db(database_host, database_port, username, password, 
-                  database_name, table_name):
+                  database_name, table_name, by_column = 'auto_id', on_column = 'eslid'):
     conn = pymysql.connect(host=database_host, port=int(database_port), 
                            user=username, passwd=password, db=database_name)
     cursor = conn.cursor()
-    sql = "delete from {} where auto_id not in \
-             (select id from \
-              (SELECT min(auto_id) as id, eslid From {} \
-               group by eslid) t ) ".format(table_name, table_name)
-    dropped = cursor.execute(sql)
-    conn.commit()
+    dropped = 0
+    try:
+        sql = "delete from {} where {} not in \
+                 (select id from \
+                  (SELECT max({}) as id, {} From {} \
+                   group by {}) t ) ".format(table_name, by_column, by_column, on_column, table_name, on_column)
+        dropped = cursor.execute(sql)
+        conn.commit()
+    except Exception as e:
+        print(e)
+        conn.rollback()	        
     cursor.close()
     conn.close()
     return dropped
@@ -62,16 +76,20 @@ def drop_duplicates_db_2(database_host, database_port, username, password,
     conn = pymysql.connect(host=database_host, port=int(database_port), 
                            user=username, passwd=password, db=database_name)
     cursor = conn.cursor()
-    sql = "SELECT REPLACE(GROUP_CONCAT(COLUMN_NAME), 'auto_id,', '')\
-    FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{}' \
-    AND TABLE_SCHEMA = '{}'".format(table_name_s1, database_name)
-    cursor.execute(sql)
-    column_list = cursor.fetchall()
-    sql = "INSERT INTO {} ({}) SELECT {} FROM {} th where not exists\
-                   (select 1 from {} where esl_id = th.esl_id\
-                    and esl_create_date>th.esl_create_date) ".format(table_name_s3,column_list[0][0], column_list[0][0], table_name_s1, table_name_s1)
-    cursor.execute(sql)
-    conn.commit()
+    try:
+        sql = "SELECT REPLACE(GROUP_CONCAT(COLUMN_NAME), 'auto_id,', '')\
+        FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{}' \
+        AND TABLE_SCHEMA = '{}'".format(table_name_s1, database_name)
+        cursor.execute(sql)
+        column_list = cursor.fetchall()
+        sql = "INSERT INTO {} ({}) SELECT {} FROM {} th where not exists\
+                       (select 1 from {} where esl_id = th.esl_id\
+                        and esl_create_date>th.esl_create_date) ".format(table_name_s3,column_list[0][0], column_list[0][0], table_name_s1, table_name_s1)
+        cursor.execute(sql)
+        conn.commit()
+    except Exception as e:
+        print(e)
+        conn.rollback()	      
     cursor.close()
     conn.close()
 
@@ -100,14 +118,20 @@ def merge_tables(database_host, database_port, username, password,
     cursor.execute(sql)
     column_list = cursor.fetchall()
     for table_name in table_list:
-        sql = "INSERT INTO {} ({}) SELECT {} FROM {}".format(s3_table, column_list[0][0], column_list[0][0], table_name)
-        cursor.execute(sql)
-        conn.commit()
+        try:
+            sql = "INSERT INTO {} ({}) SELECT {} FROM {}".format(s3_table, column_list[0][0], column_list[0][0], table_name)
+            cursor.execute(sql)
+            conn.commit()
+        except Exception as e:
+            print(e)
+            conn.rollback()	 
     cursor.close()
     conn.close()
         
 if __name__ == "__main__":
     json_encoder = get_encoding("setting.json")
+    if json_encoder[0:3] != 'utf' or 'UTF':
+        json_encoder = "GBK"
     with open("setting.json",'r', encoding = json_encoder) as load_f:
         str1 = load_f.read().replace("\\","\\\\")
         settings = json.loads(str1)
@@ -123,3 +147,4 @@ if __name__ == "__main__":
         conn.close()
     except:
         print("Failed to connect to the database")
+    time.sleep(10)
