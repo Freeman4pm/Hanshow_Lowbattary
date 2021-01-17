@@ -8,8 +8,9 @@ Created on Tue Mar 24 20:42:56 2020
 import chardet
 import os
 from datetime import date
-import pandas as pd
+import datetime
 import db_connection
+import csv
 import json 
 
 def get_encoding(file):
@@ -18,7 +19,7 @@ def get_encoding(file):
         return chardet.detect(f.read())['encoding']
 ###############################Import setting file#############################
 json_encoder = get_encoding("setting.json")
-if json_encoder[0:3] != 'utf' or 'UTF':
+if json_encoder[:3] != 'utf' and 'UTF':
     json_encoder = "GBK"
 with open("setting.json",'r', encoding = json_encoder) as load_f:
     str1 = load_f.read().replace("\\","\\\\")
@@ -44,7 +45,6 @@ except:
 
 ###############################SCANDATA#######################################
 g = os.walk(path)
-df = pd.DataFrame()
 time_stamp = date.today().strftime("%y%m%d")
 print("================Scan data==================")
 for path,dir_list,file_list in g:  
@@ -60,45 +60,62 @@ for path,dir_list,file_list in g:
     if len(tag) > 1:
         raise Exception('CustomerError: The folder ' + path + ' contains more than one customer data') 
     tag = tag[0]
+    data = []
+    esl_id = []
+    heading = []
     for file_name in file_list:
         full_path = os.path.join(path,file_name)
-        print("converting codec {}".format(full_path))
+        print("Reading csv file {}".format(full_path))
         encoding = get_encoding(full_path)
         if encoding[:3] != 'UTF' and encoding[:3] != 'utf':
-            dft = pd.read_csv(full_path,encoding = 'GBK')
-        else:
-            dft = pd.read_csv(full_path,encoding = encoding)
-        dft['tag_customer'] = tag
-        dft['tag_create_date'] = pd.to_datetime(dft['tag_create_date'], format = "%d/%m/%Y %H:%M:%S")
-        dft['esl_create_date'] = pd.to_datetime(dft['esl_create_date'], format = "%d/%m/%Y %H:%M:%S")
-        dft['esl_battery_date'] = pd.to_datetime(dft['esl_battery_date'], format = "%d/%m/%Y %H:%M:%S")
-    
-        df = pd.concat([df,dft])
+            encoding = 'GBK'
+        with open(full_path, 'r', encoding = encoding) as f:
+            f_csv = csv.DictReader(f)
+            for i, row in enumerate(f_csv):
+                esl_id.append(row['esl_id'])
+                row['tag_customer'] = tag
+                if i == 0:
+                    heading = list(row.keys())
+                if row['esl_firmware'] == '':
+                    row['esl_firmware'] = None
+                if row['firmware_resolution_x'] == '':
+                    row['firmware_resolution_x'] = None
+                if row['firmware_resolution_y'] == '':
+                    row['firmware_resolution_y'] = None
+                row['esl_create_date'] = datetime.datetime.strptime(row['esl_create_date'], '%d/%m/%Y %H:%M:%S').strftime('%Y-%m-%d %H:%M:%S')
+                row['tag_create_date'] = datetime.datetime.strptime(row['tag_create_date'], '%d/%m/%Y %H:%M:%S').strftime('%Y-%m-%d %H:%M:%S')
+                row['esl_battery_date'] = datetime.datetime.strptime(row['esl_battery_date'], '%d/%m/%Y %H:%M:%S').strftime('%Y-%m-%d %H:%M:%S')
+                data.append(list(row.values()))
+
     s0_table_name = 's0___' + tag + '_' + 'esl' + '_' + time_stamp
     s3_table_name = 's3___' + tag + '_' + 'esl' + '_' + time_stamp
-#    db_connection.create_new_db(database_host, database_port, username, password, 
-#                  database_name, s0_table_name)
-#
-#    db_connection.data_to_db(database_host, database_port, username, password, 
-#                   database_name, s0_table_name, df) 
+    db_connection.create_new_db(database_host, database_port, username, password, 
+                  database_name, s0_table_name)
     print("Data reading complete for folder " + path) 
-    
-    df.drop_duplicates("esl_id", inplace=True)
-    df['esl_id'].to_csv('esl_id/esl_id_{}_{}.csv'.format(tag, time_stamp),mode = 'w', encoding = 'GBK', index = False)
-
+    db_connection.data_to_db(database_host, database_port, username, password, 
+                   database_name, s0_table_name, heading, data) 
+    print("Data uploading complete for folder " + path) 
+    with open('esl_id/esl_id_{}_{}.csv'.format(tag, time_stamp), 'w', newline='') as csvfile:
+        for esl in esl_id:
+            csvfile.write(esl)
+            csvfile.write('\n')
+    print("ESL-ids for {} have been exported".format(tag))
+#    df.drop_duplicates("esl_id", inplace=True)
+#    df['esl_id'].to_csv('esl_id/esl_id_{}_{}.csv'.format(tag, time_stamp),mode = 'w', encoding = 'GBK', index = False)
+#
     db_connection.create_new_db(database_host, database_port, username, password, 
                   database_name, s3_table_name)
     db_connection.data_to_db(database_host, database_port, username, password, 
-                   database_name, s3_table_name, df)     
+                   database_name, s3_table_name, heading, data)     
 #    db_connection.data_to_db(database_host, database_port, username, password, 
 #               database_name, 's3___'+tag+'_'+time_stamp, df) 
 #
-#    dropped = db_connection.drop_duplicates_db(database_host, database_port, username, password, 
-#                  database_name, 's3___'+tag+'_'+time_stamp)
+    dropped = db_connection.drop_duplicates_db(database_host, database_port, username, password, 
+                  database_name, s3_table_name, 'esl_create_date', 'esl_id')
 #    db_connection.drop_duplicates_db_2(database_host, database_port, username, password, 
 #                  database_name, s0_table_name, s3_table_name)
-    print("Duplicated eslids dropped for {}".format(tag))
-    df.drop(df.index, inplace=True)
+    print("{} Duplicated eslids dropped for {}".format(dropped, tag))
+#    df.drop(df.index, inplace=True)
 ###########################MERGEDATA###########################################
 print("================Merge data==================")
 table_list = []
@@ -110,17 +127,21 @@ for tag in merge_tags:
     for row in table_tuple:
         table_list.append(row[0])
 table_list = list(set(table_list))
+print("Merging table with tags {}".format(merge_tags))
 db_connection.create_new_db(database_host, database_port, username, password, 
                   database_name, s2_table_name)
 db_connection.merge_tables(database_host, database_port, username, password, 
                            database_name, table_list, s2_table_name)
 db_connection.create_new_db(database_host, database_port, username, password, 
                   database_name, s3_table_name)
-db_connection.drop_duplicates_db_2(database_host, database_port, username, password, 
-                  database_name, s2_table_name, s3_table_name)
+db_connection.merge_tables(database_host, database_port, username, password, 
+                           database_name, table_list, s3_table_name)
 print('Data Merge Completed')
+dropped = db_connection.drop_duplicates_db(database_host, database_port, username, password, 
+                  database_name, s3_table_name, 'esl_create_date', 'esl_id')
+print('{} Duplicated eslids dropped'.format(dropped))
 #dropped = db_connection.drop_duplicates_db(database_host, database_port, username, password, 
-#                  database_name, 's3___'+merge_table+'_'+time_stamp+'_'+'merged')
+#                  database_name, s3_table_name)
 #print("{} Duplicated eslids dropped".format(dropped))
 
 ######################数据去重并将s3表输入数据库###################################

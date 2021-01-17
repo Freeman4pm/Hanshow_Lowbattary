@@ -8,9 +8,9 @@ Created on Sat Apr 11 12:38:00 2020
 import chardet
 import os
 from datetime import date
-import pandas as pd
 import db_connection
 import json 
+import csv
 
 def get_encoding(file):
     # 二进制方式读取，获取字节数据，检测类型
@@ -51,38 +51,42 @@ time_stamp = date.today().strftime("%y%m%d")
 print("================Scan data==================")
 column_names = ['eslid','eslcode','outdate','hardwareversion']
 for file_name in file_list:
-    df = pd.DataFrame()
     tag = file_name.split('-')[2]
     full_path = os.path.join(path,file_name)
-    print("converting codec {}".format(full_path))
+    print("Reading csv file {}".format(full_path))
     encoding = get_encoding(full_path)
+    data = []
     if encoding[:3] != 'UTF' and encoding[:3] != 'utf':
-        df = pd.read_csv(full_path,encoding = 'GBK', header = None, names = column_names)
-    else:
-        df = pd.read_csv(full_path,encoding = encoding, header = None, names = column_names)
-    df['outdate'] = df['outdate'].replace('	null', '	1900-01-01 00:00:00.00')
-    df['outdate'] = pd.to_datetime(df['outdate'], format = "%Y-%m-%d %H:%M:%S")
-
+            encoding = 'GBK'
+    with open(full_path, 'r', encoding = encoding) as f:
+            f_csv = csv.DictReader(f, fieldnames = column_names)
+            for i, row in enumerate(f_csv):
+                if row['outdate'] == '	null' :
+                    row['outdate'] = None
+                else:
+                    row['outdate'] = row['outdate'].strip() 
+                data.append(list(row.values()))
+    print("Data reading complete {}".format(full_path)) 
     s0_table_name = 's0___' + tag + '_' + 'him' + '_' + time_stamp
     s3_table_name = 's3___' + tag + '_' + 'him' + '_' + time_stamp
     db_connection.create_new_db(database_host, database_port, username, password, 
                   database_name, s0_table_name, data_type = 'him')
 
     db_connection.data_to_db(database_host, database_port, username, password, 
-                   database_name, s0_table_name, df) 
-    print("Data reading complete {}".format(full_path)) 
+                   database_name, s0_table_name, column_names, data) 
+    print("Data uploading complete {}".format(full_path)) 
     
     
     db_connection.create_new_db(database_host, database_port, username, password, 
                   database_name, s3_table_name, data_type = 'him')
     db_connection.data_to_db(database_host, database_port, username, password, 
-               database_name, s3_table_name, df) 
+               database_name, s3_table_name, column_names, data) 
 #
     dropped = db_connection.drop_duplicates_db(database_host, database_port, username, password, 
                   database_name, s3_table_name)
 #    db_connection.drop_duplicates_db_2(database_host, database_port, username, password, 
 #                  database_name, s0_table_name, s3_table_name)
-    print("Duplicated eslids dropped for {}".format(tag))
+    print("{} Duplicated eslids dropped for {}".format(dropped, tag))
 ###########################MERGEDATA###########################################
 print("================Merge data==================")
 s2_table_name = 's2___' + merge_table + '_' + 'him' + '_' + time_stamp + '_' + 'merged'
@@ -95,6 +99,10 @@ for tag in merge_tags:
     for row in table_tuple:
         table_list.append(row[0])
 table_list = list(set(table_list))
+db_connection.create_new_db(database_host, database_port, username, password, 
+                  database_name, s2_table_name, data_type = 'him')
+db_connection.merge_tables(database_host, database_port, username, password, 
+                           database_name, table_list, s2_table_name)
 db_connection.create_new_db(database_host, database_port, username, password, 
                   database_name, s3_table_name, data_type = 'him')
 db_connection.merge_tables(database_host, database_port, username, password, 
